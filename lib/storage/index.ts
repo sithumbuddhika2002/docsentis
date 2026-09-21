@@ -36,21 +36,31 @@ export function getBlobToken(): string | undefined {
   return undefined;
 }
 
+// Check if Vercel Blob is available (via OIDC or static token)
+export function isBlobStorageAvailable(): boolean {
+  if (process.env.BLOB_STORE_ID && process.env.BLOB_STORE_ID.trim().length > 0) {
+    return true;
+  }
+  if (getBlobToken()) {
+    return true;
+  }
+  return false;
+}
+
 // Ensure directory exists for local private storage
 function ensureLocalStorageDir() {
   const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   if (isServerless) {
-    const blobToken = getBlobToken();
-    if (!blobToken) {
+    if (!isBlobStorageAvailable()) {
       const visibleKeys = Object.keys(process.env).filter(
         (k) => !k.startsWith("npm_") && !k.startsWith("__")
       );
       console.error(
-        "[Docsentis Storage] BLOB_READ_WRITE_TOKEN is missing in this Vercel deployment! Available env keys:",
+        "[Docsentis Storage] Blob storage is not connected in this Vercel deployment! Available env keys:",
         visibleKeys
       );
       throw new Error(
-        "Missing BLOB_READ_WRITE_TOKEN in serverless environment. Local disk storage cannot be used on Vercel. Please add BLOB_READ_WRITE_TOKEN to your Vercel Project Environment Variables and redeploy."
+        "Missing Blob storage configuration in serverless environment. Ensure your Vercel Blob store is connected to this project (BLOB_STORE_ID is set)."
       );
     }
   }
@@ -121,14 +131,17 @@ export async function uploadPrivateDocument(
 
   const randomKey = `doc_${crypto.randomBytes(16).toString("hex")}.pdf`;
 
-  // If Vercel Blob token is configured (or any variation/prefix), upload to Vercel Blob
-  const blobToken = getBlobToken();
-  if (blobToken) {
-    const blob = await put(`assignments/${randomKey}`, fileBuffer, {
+  // If Vercel Blob is available (via OIDC or static token), upload to Vercel Blob
+  if (isBlobStorageAvailable()) {
+    const putOptions: any = {
       access: "public", // We still never share this URL with clients; server fetches it
       addRandomSuffix: false,
-      token: blobToken,
-    });
+    };
+    const token = getBlobToken();
+    if (token && !process.env.BLOB_STORE_ID) {
+      putOptions.token = token;
+    }
+    const blob = await put(`assignments/${randomKey}`, fileBuffer, putOptions);
     return {
       storageKey: blob.url,
       size: fileBuffer.length,
@@ -191,9 +204,13 @@ export async function deletePrivateDocument(storageKey: string): Promise<void> {
       return;
     }
 
-    const blobToken = getBlobToken();
-    if (blobToken && storageKey.startsWith("http")) {
-      await del(storageKey, { token: blobToken });
+    if (isBlobStorageAvailable() && storageKey.startsWith("http")) {
+      const delOptions: any = {};
+      const token = getBlobToken();
+      if (token && !process.env.BLOB_STORE_ID) {
+        delOptions.token = token;
+      }
+      await del(storageKey, delOptions);
     }
   } catch (err) {
     console.error("Error deleting document from storage:", err);
