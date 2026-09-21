@@ -6,19 +6,30 @@ import { put, del } from "@vercel/blob";
 // Path for private local fallback storage (outside /public)
 const LOCAL_PRIVATE_STORAGE_DIR = path.join(process.cwd(), ".private_storage");
 
-// Helper to resolve Vercel Blob token even if prefixed by Vercel
+// Helper to resolve Vercel Blob token even if prefixed by Vercel or enclosed in quotes
 export function getBlobToken(): string | undefined {
-  if (process.env.BLOB_READ_WRITE_TOKEN && process.env.BLOB_READ_WRITE_TOKEN.trim().length > 0) {
-    return process.env.BLOB_READ_WRITE_TOKEN.trim();
-  }
+  const clean = (val: string | undefined): string | undefined => {
+    if (!val) return undefined;
+    let t = val.trim();
+    if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+      t = t.slice(1, -1).trim();
+    }
+    return t.length > 0 ? t : undefined;
+  };
+
+  const direct = clean(process.env.BLOB_READ_WRITE_TOKEN);
+  if (direct) return direct;
+
   // Check if Vercel connected the store with a custom prefix (e.g. DOCSENTIS_BLOB_READ_WRITE_TOKEN)
   for (const [key, value] of Object.entries(process.env)) {
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (typeof value === "string") {
+      const cleaned = clean(value);
+      if (!cleaned) continue;
       if ((key.includes("BLOB") && key.includes("TOKEN")) || key.endsWith("READ_WRITE_TOKEN")) {
-        return value.trim();
+        return cleaned;
       }
-      if (value.startsWith("vercel_blob_rw_")) {
-        return value.trim();
+      if (cleaned.startsWith("vercel_blob_rw_")) {
+        return cleaned;
       }
     }
   }
