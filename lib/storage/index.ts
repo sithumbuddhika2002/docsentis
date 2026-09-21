@@ -8,6 +8,11 @@ const LOCAL_PRIVATE_STORAGE_DIR = path.join(process.cwd(), ".private_storage");
 
 // Ensure directory exists for local private storage
 function ensureLocalStorageDir() {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    throw new Error(
+      "Missing BLOB_READ_WRITE_TOKEN in serverless environment. Local disk storage cannot be used on Vercel. Please add BLOB_READ_WRITE_TOKEN to your Vercel Project Environment Variables and redeploy."
+    );
+  }
   if (!fs.existsSync(LOCAL_PRIVATE_STORAGE_DIR)) {
     fs.mkdirSync(LOCAL_PRIVATE_STORAGE_DIR, { recursive: true });
   }
@@ -80,6 +85,7 @@ export async function uploadPrivateDocument(
     const blob = await put(`assignments/${randomKey}`, fileBuffer, {
       access: "public", // We still never share this URL with clients; server fetches it
       addRandomSuffix: false,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
     return {
       storageKey: blob.url,
@@ -144,7 +150,7 @@ export async function deletePrivateDocument(storageKey: string): Promise<void> {
     }
 
     if (process.env.BLOB_READ_WRITE_TOKEN && storageKey.startsWith("http")) {
-      await del(storageKey);
+      await del(storageKey, { token: process.env.BLOB_READ_WRITE_TOKEN });
     }
   } catch (err) {
     console.error("Error deleting document from storage:", err);
