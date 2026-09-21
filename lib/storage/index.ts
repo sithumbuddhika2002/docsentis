@@ -6,12 +6,42 @@ import { put, del } from "@vercel/blob";
 // Path for private local fallback storage (outside /public)
 const LOCAL_PRIVATE_STORAGE_DIR = path.join(process.cwd(), ".private_storage");
 
+// Helper to resolve Vercel Blob token even if prefixed by Vercel
+export function getBlobToken(): string | undefined {
+  if (process.env.BLOB_READ_WRITE_TOKEN && process.env.BLOB_READ_WRITE_TOKEN.trim().length > 0) {
+    return process.env.BLOB_READ_WRITE_TOKEN.trim();
+  }
+  // Check if Vercel connected the store with a custom prefix (e.g. DOCSENTIS_BLOB_READ_WRITE_TOKEN)
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      if ((key.includes("BLOB") && key.includes("TOKEN")) || key.endsWith("READ_WRITE_TOKEN")) {
+        return value.trim();
+      }
+      if (value.startsWith("vercel_blob_rw_")) {
+        return value.trim();
+      }
+    }
+  }
+  return undefined;
+}
+
 // Ensure directory exists for local private storage
 function ensureLocalStorageDir() {
-  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    throw new Error(
-      "Missing BLOB_READ_WRITE_TOKEN in serverless environment. Local disk storage cannot be used on Vercel. Please add BLOB_READ_WRITE_TOKEN to your Vercel Project Environment Variables and redeploy."
-    );
+  const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (isServerless) {
+    const blobToken = getBlobToken();
+    if (!blobToken) {
+      const visibleKeys = Object.keys(process.env).filter(
+        (k) => !k.startsWith("npm_") && !k.startsWith("__")
+      );
+      console.error(
+        "[Docsentis Storage] BLOB_READ_WRITE_TOKEN is missing in this Vercel deployment! Available env keys:",
+        visibleKeys
+      );
+      throw new Error(
+        "Missing BLOB_READ_WRITE_TOKEN in serverless environment. Local disk storage cannot be used on Vercel. Please add BLOB_READ_WRITE_TOKEN to your Vercel Project Environment Variables and redeploy."
+      );
+    }
   }
   if (!fs.existsSync(LOCAL_PRIVATE_STORAGE_DIR)) {
     fs.mkdirSync(LOCAL_PRIVATE_STORAGE_DIR, { recursive: true });
@@ -80,12 +110,13 @@ export async function uploadPrivateDocument(
 
   const randomKey = `doc_${crypto.randomBytes(16).toString("hex")}.pdf`;
 
-  // If Vercel Blob token is configured, upload to Vercel Blob
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
+  // If Vercel Blob token is configured (or any variation/prefix), upload to Vercel Blob
+  const blobToken = getBlobToken();
+  if (blobToken) {
     const blob = await put(`assignments/${randomKey}`, fileBuffer, {
       access: "public", // We still never share this URL with clients; server fetches it
       addRandomSuffix: false,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
+      token: blobToken,
     });
     return {
       storageKey: blob.url,
@@ -149,8 +180,9 @@ export async function deletePrivateDocument(storageKey: string): Promise<void> {
       return;
     }
 
-    if (process.env.BLOB_READ_WRITE_TOKEN && storageKey.startsWith("http")) {
-      await del(storageKey, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    const blobToken = getBlobToken();
+    if (blobToken && storageKey.startsWith("http")) {
+      await del(storageKey, { token: blobToken });
     }
   } catch (err) {
     console.error("Error deleting document from storage:", err);
