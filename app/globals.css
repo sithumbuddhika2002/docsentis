@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F7F8FA;
+  --foreground: #172033;
+  --card: #FFFFFF;
+  --card-foreground: #172033;
+  --border: #E5E7EB;
+  --primary: #172033;
+  --primary-foreground: #FFFFFF;
+  --secondary: #344054;
+  --secondary-foreground: #FFFFFF;
+  --accent: #2563EB;
+  --accent-foreground: #FFFFFF;
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Security deterrent: Disable text selection and drag for viewer surfaces */
+.secure-viewer-no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Watermark diagonal overlay styling */
+.peaksora-watermark-grid,
+.docsentis-watermark-grid {
+  pointer-events: none;
+  user-select: none;
+  background-repeat: repeat;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
