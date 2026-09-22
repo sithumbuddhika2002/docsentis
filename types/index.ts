@@ -26,6 +26,7 @@ export interface IUser {
   email: string;
   passwordHash: string;
   role: UserRole;
+  isInvited?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

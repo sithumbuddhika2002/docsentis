@@ -27,16 +27,20 @@ export async function GET(req: Request) {
       ];
     }
 
+    const limitParam = parseInt(url.searchParams.get("limit") || "100", 10);
+    const limit = Math.min(Math.max(limitParam || 100, 1), 200);
+
     const users = await User.find(query)
-      .select("name email role createdAt")
+      .select("name email role isInvited createdAt")
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(limit);
 
     const formatted = users.map((u) => ({
       id: u._id.toString(),
       name: u.name,
       email: u.email,
       role: u.role,
+      isInvited: !!u.isInvited,
       createdAt: u.createdAt,
     }));
 

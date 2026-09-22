@@ -1,13 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Shield, Lock, Mail, User, ArrowRight, AlertCircle } from "lucide-react";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect");
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,7 +40,10 @@ export default function RegisterPage() {
         throw new Error(data.error || "Failed to register account");
       }
 
-      if (data.user.role === "OWNER" || data.user.role === "ADMIN") {
+      // Route based on redirect param or user role
+      if (redirectUrl && redirectUrl.startsWith("/")) {
+        router.push(redirectUrl);
+      } else if (data.user.role === "OWNER" || data.user.role === "ADMIN") {
         router.push("/dashboard");
       } else {
         router.push("/documents");
@@ -48,6 +54,10 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  const loginHref = redirectUrl
+    ? `/login?redirect=${encodeURIComponent(redirectUrl)}`
+    : "/login";
 
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -191,7 +201,7 @@ export default function RegisterPage() {
 
           <div className="mt-6 text-center text-xs text-secondary">
             Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-accent hover:underline">
+            <Link href={loginHref} className="font-semibold text-accent hover:underline">
               Sign in here
             </Link>
           </div>
@@ -211,5 +221,19 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

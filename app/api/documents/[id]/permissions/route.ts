@@ -12,6 +12,8 @@ import crypto from "crypto";
 const grantSchema = z.object({
   email: z.string().email("Invalid email address").toLowerCase().trim(),
   expiresAt: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)),
+  name: z.string().max(60).optional(),
+  password: z.string().min(6, "Password must be at least 6 characters").optional().or(z.literal("")),
 });
 
 export async function GET(
@@ -92,7 +94,7 @@ export async function POST(
       );
     }
 
-    const { email, expiresAt } = parsed.data;
+    const { email, expiresAt, name, password } = parsed.data;
     const expiryDate = new Date(expiresAt);
 
     if (expiryDate.getTime() <= Date.now()) {
@@ -104,15 +106,36 @@ export async function POST(
 
     // Find or create target user
     let targetUser = await User.findOne({ email });
+    let isNewUser = false;
+    let finalPassword = password && password.trim().length > 0 ? password.trim() : undefined;
+
     if (!targetUser) {
-      const tempPassword = crypto.randomBytes(12).toString("hex");
-      const passwordHash = await hashPassword(tempPassword);
+      isNewUser = true;
+      if (!finalPassword) {
+        finalPassword = crypto.randomBytes(6).toString("hex");
+      }
+      const passwordHash = await hashPassword(finalPassword);
       targetUser = await User.create({
-        name: email.split("@")[0],
+        name: name?.trim() || email.split("@")[0],
         email,
         passwordHash,
         role: "USER",
+        isInvited: true,
       });
+    } else {
+      // If target user already exists, update password if admin provided one
+      let userUpdated = false;
+      if (finalPassword) {
+        targetUser.passwordHash = await hashPassword(finalPassword);
+        userUpdated = true;
+      }
+      if (name?.trim() && targetUser.name === targetUser.email.split("@")[0]) {
+        targetUser.name = name.trim();
+        userUpdated = true;
+      }
+      if (userUpdated) {
+        await targetUser.save();
+      }
     }
 
     // Check if permission already exists
@@ -165,7 +188,17 @@ export async function POST(
         expiresAt: permission.expiresAt,
         createdAt: permission.createdAt,
       },
-      message: "Access granted successfully",
+      isNewUser,
+      sharedCredentials: finalPassword
+        ? {
+            email: targetUser.email,
+            password: finalPassword,
+            name: targetUser.name,
+          }
+        : null,
+      message: isNewUser
+        ? "User account created and access granted successfully"
+        : "Access granted successfully",
     });
   } catch (error: any) {
     console.error("Grant permission error:", error);

@@ -19,6 +19,10 @@ const UserSchema = new Schema<IUser>(
       default: "USER",
       required: true,
     },
+    isInvited: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
